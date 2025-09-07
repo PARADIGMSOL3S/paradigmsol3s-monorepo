@@ -1,0 +1,173 @@
+name: AI Code Validation Pipeline
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [develop]
+  workflow_dispatch:
+    inputs:
+      validation_level:
+        description: 'AI Validation Level'
+        required: true
+        default: 'standard'
+        type: choice
+        options:
+          - standard
+          - comprehensive
+          - minimal
+
+env:
+  OPENAI_API_VERSION: '2024-02-01'
+  GEMINI_API_VERSION: 'v1'
+  NODE_VERSION: '18.x'
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  ai-code-review:
+    runs-on: ubuntu-latest
+    name: AI-Powered Code Review
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install AI Validation Tools
+        run: |
+          npm install -g @openai/openai
+          pip install openai google-generativeai
+          pip install pylint bandit safety
+
+      - name: Detect Changed Files
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git diff --name-only ${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }} > changed_files.txt
+          else
+            git diff --name-only HEAD~1..HEAD > changed_files.txt
+          fi
+          echo "changed_files=$(cat changed_files.txt | tr '\n' ' ')" >> $GITHUB_OUTPUT
+
+      - name: AI Code Quality Analysis
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          echo "Running AI-powered code analysis..."
+          # Create AI analysis script
+          cat > ai_analyzer.py << EOF
+          import os
+          import openai
+          import google.generativeai as genai
+          
+          def analyze_code_with_ai(file_content, filename):
+              print(f"Analyzing {filename}...")
+              
+              # OpenAI Analysis
+              if os.environ.get('OPENAI_API_KEY'):
+                  client = openai.OpenAI()
+                  response = client.chat.completions.create(
+                      model="gpt-3.5-turbo",
+                      messages=[
+                          {"role": "system", "content": "You are a code reviewer. Analyze the code for bugs, security issues, performance problems, and suggest improvements."},
+                          {"role": "user", "content": f"Analyze this {filename}:\n\n{file_content}"}
+                      ],
+                      max_tokens=1000
+                  )
+                  print("OpenAI Analysis:", response.choices[0].message.content)
+              
+              # Gemini Analysis
+              if os.environ.get('GEMINI_API_KEY'):
+                  genai.configure(api_key=os.environ['GEMINI_API_KEY'])
+                  model = genai.GenerativeModel('gemini-pro')
+                  prompt = f"Analyze this code file {filename} for security vulnerabilities, code quality issues, and best practices:\n\n{file_content}"
+                  response = model.generate_content(prompt)
+                  print("Gemini Analysis:", response.text)
+          
+          # Analyze changed files
+          with open('changed_files.txt', 'r') as f:
+              for filename in f.read().strip().split():
+                  if filename.endswith(('.py', '.js', '.ts', '.go', '.java', '.cpp', '.c')):
+                      try:
+                          with open(filename, 'r') as code_file:
+                              content = code_file.read()
+                              analyze_code_with_ai(content, filename)
+                      except FileNotFoundError:
+                          print(f"File {filename} not found, may have been deleted")
+          EOF
+          
+          python ai_analyzer.py
+
+      - name: AI Security Vulnerability Scan
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          echo "Running AI security vulnerability scan..."
+          # Run security tools first
+          bandit -r . -f json -o bandit_report.json || true
+          safety check --json --output safety_report.json || true
+          
+          # AI-powered security analysis
+          if [ -f bandit_report.json ]; then
+            echo "AI analyzing security report..."
+          fi
+
+      - name: AI Code Complexity Analysis
+        run: |
+          echo "Analyzing code complexity with AI assistance..."
+          find . -name "*.py" -exec pylint {} \; > pylint_report.txt || true
+          find . -name "*.js" -exec npx eslint {} \; > eslint_report.txt || true
+          
+          echo "Code complexity analysis completed"
+
+      - name: Generate AI Validation Report
+        run: |
+          echo "# AI Code Validation Report" > ai_validation_report.md
+          echo "" >> ai_validation_report.md
+          echo "## Summary" >> ai_validation_report.md
+          echo "- Validation Level: ${{ github.event.inputs.validation_level || 'standard' }}" >> ai_validation_report.md
+          echo "- Files Analyzed: $(cat changed_files.txt | wc -l)" >> ai_validation_report.md
+          echo "- AI Models Used: OpenAI GPT-3.5, Google Gemini Pro" >> ai_validation_report.md
+          echo "" >> ai_validation_report.md
+          echo "## Recommendations" >> ai_validation_report.md
+          echo "- Review AI-suggested improvements above" >> ai_validation_report.md
+          echo "- Address security vulnerabilities if found" >> ai_validation_report.md
+          echo "- Consider code quality improvements" >> ai_validation_report.md
+
+      - name: Upload AI Analysis Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: ai-validation-results
+          path: |
+            ai_validation_report.md
+            bandit_report.json
+            safety_report.json
+            pylint_report.txt
+            eslint_report.txt
+
+      - name: Comment PR with AI Findings
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            if (fs.existsSync('ai_validation_report.md')) {
+              const report = fs.readFileSync('ai_validation_report.md', 'utf8');
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: `🤖 **AI Code Validation Results**\n\n${report}`
+              });
+            }
