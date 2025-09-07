@@ -1,0 +1,210 @@
+name: Security Scan Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 2 * * *' # Daily at 2 AM UTC
+  workflow_dispatch:
+    inputs:
+      scan_level:
+        description: 'Security scan level'
+        required: true
+        default: 'standard'
+        type: choice
+        options:
+          - minimal
+          - standard
+          - comprehensive
+
+env:
+  NODE_VERSION: '18.x'
+  PYTHON_VERSION: '3.11'
+  GO_VERSION: '1.21'
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    name: Comprehensive Security Scan
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Setup Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript, python, go
+          queries: security-extended,security-and-quality
+
+      - name: Install Security Tools
+        run: |
+          # Python security tools
+          pip install bandit safety pip-audit semgrep
+          
+          # JavaScript security tools
+          npm install -g npm-audit eslint-plugin-security @microsoft/eslint-formatter-sarif
+          
+          # Go security tools
+          go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          
+          # Container security
+          wget https://github.com/aquasecurity/trivy/releases/latest/download/trivy_0.44.0_Linux-64bit.tar.gz
+          tar zxvf trivy_0.44.0_Linux-64bit.tar.gz
+          sudo mv trivy /usr/local/bin/
+
+      - name: Python Security Analysis
+        run: |
+          echo "Running Python security scans..."
+          # Bandit - security issues in Python code
+          bandit -r . -f sarif -o bandit-results.sarif || true
+          bandit -r . -f json -o bandit-results.json || true
+          
+          # Safety - known security vulnerabilities in dependencies
+          safety check --json --output safety-results.json || true
+          
+          # pip-audit - audit Python packages for known vulnerabilities
+          pip-audit --format=json --output=pip-audit-results.json || true
+
+      - name: JavaScript Security Analysis
+        run: |
+          echo "Running JavaScript security scans..."
+          # npm audit for dependency vulnerabilities
+          npm audit --audit-level=moderate --json > npm-audit-results.json || true
+          
+          # ESLint security plugin
+          npx eslint . --ext .js,.ts --format @microsoft/eslint-formatter-sarif --output-file eslint-security.sarif || true
+
+      - name: Go Security Analysis
+        run: |
+          echo "Running Go security scans..."
+          # Gosec - security analysis
+          gosec -fmt sarif -out gosec-results.sarif ./... || true
+          gosec -fmt json -out gosec-results.json ./... || true
+          
+          # Go vulnerability check
+          govulncheck -json ./... > govulncheck-results.json || true
+
+      - name: Semgrep Static Analysis
+        run: |
+          echo "Running Semgrep static analysis..."
+          semgrep --config=auto --sarif --output=semgrep-results.sarif . || true
+          semgrep --config=auto --json --output=semgrep-results.json . || true
+
+      - name: Container Security Scan
+        if: ${{ github.event.inputs.scan_level == 'comprehensive' || github.event.inputs.scan_level == '' }}
+        run: |
+          echo "Running container security scan..."
+          # Scan Dockerfile if present
+          if [ -f "Dockerfile" ]; then
+            trivy config --format sarif --output dockerfile-trivy.sarif Dockerfile || true
+          fi
+          
+          # Scan filesystem
+          trivy fs --format sarif --output filesystem-trivy.sarif . || true
+
+      - name: Dependency Vulnerability Scan
+        run: |
+          echo "Scanning dependencies for vulnerabilities..."
+          # Create consolidated dependency report
+          echo "# Dependency Vulnerability Report" > dependency-report.md
+          echo "" >> dependency-report.md
+          
+          if [ -f "package.json" ]; then
+            echo "## NPM Dependencies" >> dependency-report.md
+            npm list --depth=0 >> dependency-report.md 2>&1 || true
+          fi
+          
+          if [ -f "requirements.txt" ]; then
+            echo "## Python Dependencies" >> dependency-report.md
+            pip list >> dependency-report.md 2>&1 || true
+          fi
+          
+          if [ -f "go.mod" ]; then
+            echo "## Go Dependencies" >> dependency-report.md
+            go list -m all >> dependency-report.md 2>&1 || true
+          fi
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript,python,go"
+
+      - name: Generate Security Report
+        run: |
+          echo "# Security Scan Report" > security-report.md
+          echo "" >> security-report.md
+          echo "**Scan Date:** $(date)" >> security-report.md
+          echo "**Scan Level:** ${{ github.event.inputs.scan_level || 'standard' }}" >> security-report.md
+          echo "**Repository:** ${{ github.repository }}" >> security-report.md
+          echo "** Branch:** ${{ github.ref_name }}" >> security-report.md
+          echo "" >> security-report.md
+          
+          echo "## Scan Summary" >> security-report.md
+          echo "- Python Security (Bandit): $(test -f bandit-results.json && echo 'Complete' || echo 'Skipped')" >> security-report.md
+          echo "- JavaScript Security (ESLint): $(test -f eslint-security.sarif && echo 'Complete' || echo 'Skipped')" >> security-report.md
+          echo "- Go Security (Gosec): $(test -f gosec-results.json && echo 'Complete' || echo 'Skipped')" >> security-report.md
+          echo "- Container Security (Trivy): $(test -f filesystem-trivy.sarif && echo 'Complete' || echo 'Skipped')" >> security-report.md
+          echo "- Static Analysis (Semgrep): $(test -f semgrep-results.json && echo 'Complete' || echo 'Skipped')" >> security-report.md
+          echo "- CodeQL Analysis: Complete" >> security-report.md
+          echo "" >> security-report.md
+          
+          echo "## Recommendations" >> security-report.md
+          echo "1. Review all identified vulnerabilities" >> security-report.md
+          echo "2. Update dependencies with known vulnerabilities" >> security-report.md
+          echo "3. Address code security issues" >> security-report.md
+          echo "4. Implement additional security controls if needed" >> security-report.md
+
+      - name: Upload Security Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-scan-results-${{ github.run_number }}
+          path: |
+            security-report.md
+            dependency-report.md
+            *-results.json
+            *-results.sarif
+            *.sarif
+          retention-days: 30
+
+      - name: Upload SARIF Results
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: .
+          category: security-scan
+
+      - name: Security Scan Summary
+        if: always()
+        run: |
+          echo "=== Security Scan Completed ==="
+          echo "Check the Security tab for detailed findings"
+          echo "Artifacts uploaded for detailed review"
+          
+          # Count issues if possible
+          if [ -f "bandit-results.json" ]; then
+            python3 -c "import json; data=json.load(open('bandit-results.json')); print(f'Python issues found: {len(data.get(\"results\", []))}')"
+          fi
