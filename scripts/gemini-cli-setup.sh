@@ -184,11 +184,7 @@ import click
 import logging
 from pathlib import Path
 
-try:
-    import google.generativeai as genai
-except ImportError:
-    print("Error: google-generativeai not installed. Run: pip install google-generativeai")
-    sys.exit(1)
+import google.generativeai as genai
 
 # Configuration
 CONFIG_DIR = Path.home() / ".config" / "paradigmsol3s-gemini"
@@ -198,19 +194,37 @@ def load_config():
     """Load configuration from YAML file"""
     if CONFIG_FILE.exists():
         with open(CONFIG_FILE, 'r') as f:
-            return yaml.safe_load(f)
+            return yaml.safe_load(f) or {}
     return {}
+
+def save_config(config):
+    """Persist configuration to YAML file"""
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+    with open(CONFIG_FILE, 'w') as f:
+        yaml.safe_dump(config, f, default_flow_style=False, sort_keys=False)
+
+def set_nested_value(data, dotted_key, value):
+    """Set nested dictionary value from dot-notation key"""
+    keys = dotted_key.split('.')
+    current = data
+    for key in keys[:-1]:
+        if key not in current or not isinstance(current[key], dict):
+            current[key] = {}
+        current = current[key]
+    current[keys[-1]] = value
 
 def setup_logging(config):
     """Setup logging based on configuration"""
     log_level = config.get('logging', {}).get('level', 'INFO')
     log_file = config.get('logging', {}).get('file', 'gemini-cli.log')
+    log_path = Path(log_file).expanduser()
+    log_path.parent.mkdir(parents=True, exist_ok=True)
     
     logging.basicConfig(
         level=getattr(logging, log_level),
         format='%(asctime)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler(log_file),
+            logging.FileHandler(log_path),
             logging.StreamHandler(sys.stdout)
         ]
     )
@@ -250,7 +264,10 @@ def generate(ctx, prompt, model, temperature, output):
     temp = temperature or config.get('settings', {}).get('temperature', 0.7)
     
     try:
-        response = model.generate_content(prompt)
+        response = model.generate_content(
+            prompt,
+            generation_config={"temperature": temp}
+        )
         result = response.text
         
         if output:
@@ -276,8 +293,10 @@ def config_show(ctx):
 @click.option('--value', required=True, help='Configuration value to set')
 def config_set(key, value):
     """Set configuration value"""
-    click.echo(f"Setting {key} = {value}")
-    # Implementation for setting config values
+    config = load_config()
+    set_nested_value(config, key, value)
+    save_config(config)
+    click.echo(f"Updated {key} in {CONFIG_FILE}")
 
 if __name__ == '__main__':
     cli()
