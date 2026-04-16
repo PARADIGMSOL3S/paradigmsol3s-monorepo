@@ -2,6 +2,20 @@
 
 🏛️ **House of Soles (SOL3$)** - Pioneering decentralized footwear innovation on blockchain.
 
+## Phase 0-A Status (Schedule Gate)
+
+The current schedule gate deliverable is the full `AetherCertificate.sol` contract plus deterministic Merkle tooling, deployment automation, metadata template, and the enhanced frontend.
+
+- Contract: `contracts/AetherCertificate.sol`
+- Deployment: `scripts/deploy.js`
+- Merkle tooling: `scripts/generateMerkle.js`
+- Metadata template: `token_template.json`
+- Frontend shell: `houseofsoles-expo.html`
+- Validation plan: `docs/PHASE0A_VALIDATION_PLAN.md`
+- Spec validation notes: `docs/EXPO_SPEC_VALIDATION.md`
+
+This baseline is structured for AI-assisted workflows across Claude, Codex, and Gemini CLI with a responsive, modular admin dashboard foundation for desktop and tablet.
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Security Scan](https://github.com/PARADIGMSOL3S/paradigmsol3s-monorepo/actions/workflows/security-scan.yml/badge.svg)](https://github.com/PARADIGMSOL3S/paradigmsol3s-monorepo/actions/workflows/security-scan.yml)
 [![AI Validation](https://github.com/PARADIGMSOL3S/paradigmsol3s-monorepo/actions/workflows/ai-validation.yml/badge.svg)](https://github.com/PARADIGMSOL3S/paradigmsol3s-monorepo/actions/workflows/ai-validation.yml)

@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>House of Soles Expo Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.1/dist/ethers.umd.min.js"></script>
+  <style>
+    :root { --bg:#0a0d14; --panel:#121826; --muted:#9ca7bb; --accent:#5eead4; --text:#ecf2ff; --warn:#f59e0b; }
+    body{margin:0;font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--text)}
+    .grid{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
+    nav{background:#0f1524;padding:16px;position:sticky;top:0;height:100vh}
+    nav a{display:block;color:var(--muted);text-decoration:none;padding:10px;border-radius:8px}
+    nav a:hover,nav a:focus{background:#1b2538;color:white}
+    main{padding:20px;display:grid;gap:16px}
+    .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+    .card,.panel{background:var(--panel);border:1px solid #253149;border-radius:12px;padding:14px}
+    .pill{display:inline-block;padding:6px 10px;border-radius:999px;background:#1b2538;margin-right:6px}
+    .badge{padding:2px 8px;border-radius:999px;font-size:12px}
+    .ok{background:#093;}.pending{background:#5b4;}.warn{background:#b70}
+    table{width:100%;border-collapse:collapse} th,td{border-bottom:1px solid #253149;padding:8px;text-align:left}
+    .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    input,button,select,textarea{width:100%;padding:10px;border-radius:8px;border:1px solid #2a364f;background:#0f1524;color:var(--text)}
+    button{cursor:pointer;background:#19243a}
+    @media (max-width:1024px){.grid{grid-template-columns:1fr}nav{height:auto;position:relative}}
+  </style>
+</head>
+<body>
+  <div class="grid">
+    <nav aria-label="Primary">
+      <h2>House of Soles</h2>
+      <a href="#hero">Hero</a>
+      <a href="#drops">Drop Lineup</a>
+      <a href="#rsvp">RSVP</a>
+      <a href="#lookup">Certificate Lookup</a>
+      <a href="#dashboard">Live Dashboard</a>
+      <a href="#timeline">Timeline</a>
+      <a href="#admin">Admin Panel</a>
+    </nav>
+    <main>
+      <section id="hero" class="panel">
+        <h1>Aether Expo Console</h1>
+        <p>Live on-chain counter and event operations panel.</p>
+        <div class="cards">
+          <div class="card"><strong id="chainCounter">-</strong><div>Total Minted</div></div>
+          <div class="card"><strong id="phaseLabel">Closed</strong><div>Current Phase</div></div>
+          <div class="card"><strong id="countdown">--:--:--</strong><div>Countdown</div></div>
+        </div>
+        <p><span class="pill">Founding</span><span class="pill">Club</span><span class="pill">Public</span></p>
+      </section>
+
+      <section id="drops" class="panel">
+        <h2>Drop Lineup</h2>
+        <table>
+          <thead><tr><th>Drop</th><th>Date</th><th>Status</th></tr></thead>
+          <tbody id="dropRows"></tbody>
+        </table>
+      </section>
+
+      <section id="rsvp" class="panel row">
+        <div>
+          <h2>RSVP Form</h2>
+          <label>Name <input id="rsvpName" /></label>
+          <label>EVM Address <input id="rsvpWallet" placeholder="0x..." /></label>
+          <label>Email <input id="rsvpEmail" type="email" /></label>
+          <button id="rsvpSave">Save RSVP</button>
+          <small id="rsvpMsg"></small>
+        </div>
+        <div>
+          <h2>Xaman QR Placeholder</h2>
+          <div class="card" style="min-height:180px;display:grid;place-items:center">XRPL Xaman QR slot</div>
+        </div>
+      </section>
+
+      <section id="lookup" class="panel">
+        <h2>Certificate Lookup</h2>
+        <div class="row">
+          <input id="lookupToken" placeholder="Token ID" />
+          <button id="lookupBtn">Lookup</button>
+        </div>
+        <pre id="lookupOut"></pre>
+      </section>
+
+      <section id="dashboard" class="panel">
+        <h2>Live Dashboard</h2>
+        <label><input type="checkbox" id="dashToggle" /> Enable live board</label>
+        <div id="dashBody" hidden>
+          <div class="cards">
+            <div class="card"><strong id="kpiRsvp">0</strong><div>RSVP Count</div></div>
+            <div class="card"><strong id="kpiApproved">0</strong><div>Approved</div></div>
+            <div class="card"><strong id="kpiRejected">0</strong><div>Rejected</div></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="timeline" class="panel">
+        <h2>Schedule Timeline</h2>
+        <ul>
+          <li>Phase config + Merkle import</li>
+          <li>RSVP approvals and export</li>
+          <li>Founding drop launch</li>
+          <li>Club + public drops</li>
+        </ul>
+      </section>
+
+      <section id="admin" class="panel">
+        <h2>Admin Panel</h2>
+        <div class="row">
+          <div>
+            <h3>RSVP Moderation</h3>
+            <table><thead><tr><th>Name</th><th>Wallet</th><th>Action</th></tr></thead><tbody id="adminRows"></tbody></table>
+            <div class="row">
+              <button id="exportJson">Export JSON</button>
+              <button id="exportCsv">Export CSV</button>
+            </div>
+            <button id="exportMerkle">Export EVM-only</button>
+          </div>
+          <div>
+            <h3>Drop CMS + Settings</h3>
+            <label>Contract Address <input id="cfgContract" /></label>
+            <label>Expo Date <input id="cfgDate" type="datetime-local" /></label>
+            <label>Whatnot URL <input id="cfgWhatnot" /></label>
+            <button id="saveCfg">Save Settings</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+<script>
+const drops = [
+  {name:'Founding Drop',date:'2026-06-10T18:00:00Z',status:'pending'},
+  {name:'Club Drop',date:'2026-06-17T18:00:00Z',status:'pending'},
+  {name:'Public Drop',date:'2026-06-24T18:00:00Z',status:'ok'},
+];
+let rsvps = JSON.parse(localStorage.getItem('rsvps')||'[]');
+let cfg = JSON.parse(localStorage.getItem('expoCfg')||'{}');
+
+function renderDrops(){
+  document.getElementById('dropRows').innerHTML = drops.map(d=>`<tr><td>${d.name}</td><td>${new Date(d.date).toLocaleString()}</td><td><span class="badge ${d.status}">${d.status}</span></td></tr>`).join('');
+}
+function renderAdmin(){
+  const body = document.getElementById('adminRows');
+  body.innerHTML = rsvps.map((r,i)=>`<tr><td>${r.name}</td><td>${r.wallet}</td><td><button onclick="setStatus(${i},'approved')">Approve</button> <button onclick="setStatus(${i},'rejected')">Reject</button></td></tr>`).join('');
+  document.getElementById('kpiRsvp').textContent = rsvps.length;
+  document.getElementById('kpiApproved').textContent = rsvps.filter(x=>x.status==='approved').length;
+  document.getElementById('kpiRejected').textContent = rsvps.filter(x=>x.status==='rejected').length;
+}
+function setStatus(i,s){ rsvps[i].status=s; saveRsvps(); }
+function saveRsvps(){ localStorage.setItem('rsvps',JSON.stringify(rsvps)); renderAdmin(); }
+
+function isEvmAddress(address){ try { return !!ethers.getAddress(address); } catch { return false; } }
+
+document.getElementById('rsvpSave').onclick = ()=>{
+  const name = document.getElementById('rsvpName').value.trim();
+  const wallet = document.getElementById('rsvpWallet').value.trim();
+  const email = document.getElementById('rsvpEmail').value.trim();
+  if(!isEvmAddress(wallet)){ document.getElementById('rsvpMsg').textContent='Invalid EVM address'; return; }
+  rsvps.push({name,wallet:ethers.getAddress(wallet),email,status:'pending'});
+  saveRsvps();
+  document.getElementById('rsvpMsg').textContent='Saved';
+};
+
+document.getElementById('lookupBtn').onclick = ()=>{
+  const id = document.getElementById('lookupToken').value;
+  document.getElementById('lookupOut').textContent = JSON.stringify({ tokenId:id, status:'lookup placeholder', contract:cfg.contract||null }, null, 2);
+};
+document.getElementById('dashToggle').onchange = (e)=>{ document.getElementById('dashBody').hidden = !e.target.checked; };
+
+document.getElementById('exportJson').onclick = ()=>download('rsvps.json', JSON.stringify(rsvps,null,2));
+document.getElementById('exportCsv').onclick = ()=>download('rsvps.csv', 'name,wallet,email,status\n'+rsvps.map(r=>`${r.name},${r.wallet},${r.email},${r.status}`).join('\n'));
+document.getElementById('exportMerkle').onclick = ()=>download('merkle-input.json', JSON.stringify({addresses:rsvps.filter(r=>isEvmAddress(r.wallet)).map(r=>ethers.getAddress(r.wallet))},null,2));
+
+function download(name,data){ const blob = new Blob([data],{type:'text/plain'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; a.click(); }
+
+document.getElementById('saveCfg').onclick = ()=>{
+  cfg.contract = document.getElementById('cfgContract').value.trim();
+  cfg.date = document.getElementById('cfgDate').value;
+  cfg.whatnot = document.getElementById('cfgWhatnot').value.trim();
+  localStorage.setItem('expoCfg', JSON.stringify(cfg));
+};
+
+function updateCountdown(){
+  const target = cfg.date ? new Date(cfg.date).getTime() : Date.now() + 86_400_000;
+  const diff = Math.max(0, target - Date.now());
+  const h = String(Math.floor(diff/3_600_000)).padStart(2,'0');
+  const m = String(Math.floor(diff%3_600_000/60_000)).padStart(2,'0');
+  const s = String(Math.floor(diff%60_000/1000)).padStart(2,'0');
+  document.getElementById('countdown').textContent = `${h}:${m}:${s}`;
+}
+
+async function refreshChainCounter(){
+  try {
+    if(!cfg.contract){ document.getElementById('chainCounter').textContent='set contract'; return; }
+    const provider = new ethers.JsonRpcProvider('https://api.avax.network/ext/bc/C/rpc');
+    const abi = ['function saleStatus() view returns (tuple(uint8 phase,bool paused,uint256 maxSupply,uint256 minted,uint256 remaining,bytes32 foundingRoot,bytes32 clubRoot,address treasury,address royaltyReceiver))'];
+    const c = new ethers.Contract(cfg.contract, abi, provider);
+    const status = await c.saleStatus();
+    document.getElementById('chainCounter').textContent = String(status.minted);
+    document.getElementById('phaseLabel').textContent = ['Closed','Founding','Club','Public'][Number(status.phase)] || 'Unknown';
+  } catch(e){ document.getElementById('chainCounter').textContent='offline'; }
+}
+
+renderDrops(); renderAdmin();
+setInterval(updateCountdown,1000); updateCountdown();
+setInterval(refreshChainCounter,30_000); refreshChainCounter();
+</script>
+</body>
+</html>

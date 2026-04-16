@@ -1,0 +1,30 @@
+{
+  "name": "House of Soles Aether Certificate #{{tokenId}}",
+  "description": "Verifiable House of Soles certificate with cross-chain provenance metadata.",
+  "image": "ipfs://REPLACE_WITH_IMAGE_CID/{{tokenId}}.png",
+  "external_url": "https://houseofsoles.info/certificate/{{tokenId}}",
+  "attributes": [
+    { "trait_type": "Certificate ID", "value": "{{certificateId}}" },
+    { "trait_type": "Drop Name", "value": "{{dropName}}" },
+    { "trait_type": "Drop Phase", "value": "{{phase}}" },
+    { "trait_type": "Tier", "value": "{{tier}}" },
+    { "trait_type": "Holder Wallet", "value": "{{holderWallet}}" },
+    { "trait_type": "Minted At", "display_type": "date", "value": "{{mintedAtEpoch}}" },
+    { "trait_type": "Issue Locale", "value": "{{issueLocale}}" },
+    { "trait_type": "Edition Number", "value": "{{editionNumber}}" },
+    { "trait_type": "Collection Supply Cap", "value": "300" },
+    { "trait_type": "Chain ID", "value": "{{chainId}}" },
+    { "trait_type": "Verification URI", "value": "{{verificationUri}}" }
+  ],
+  "provenance": {
+    "evm_tx_hash": "{{evmTxHash}}",
+    "xrpl_reference": "off-ledger JSON referenced by NFT URI"
+  },
+  "_aether_extended": {
+    "visibility": "INTERNAL",
+    "notes": "This block is INTERNAL and must never be returned from public tokenURI responses.",
+    "wormhole_delivery_hash": "{{wormholeDeliveryHash}}",
+    "merkle_phase_version": "{{phaseVersion}}",
+    "raw_internal_payload": "{{internalPayload}}"
+  }
+}
